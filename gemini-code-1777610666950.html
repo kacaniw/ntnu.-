@@ -1,0 +1,339 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>文化記憶配對 - 雙人對戰版</title>
+    <style>
+        :root {
+            --primary: #5D4037;
+            --p1-color: #C62828; /* 闖關者紅 */
+            --p2-color: #1565C0; /* 關主藍 */
+            --bg: #EFEBE9;
+            --success: #2E7D32;
+        }
+
+        body {
+            font-family: "Microsoft JhengHei", sans-serif;
+            background-color: var(--bg);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            margin: 0;
+            padding: 20px;
+        }
+
+        .dashboard {
+            display: flex;
+            gap: 15px;
+            background: white;
+            padding: 15px 25px;
+            border-radius: 50px;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.15);
+            margin-bottom: 20px;
+            font-weight: bold;
+            position: sticky;
+            top: 10px;
+            z-index: 50;
+        }
+
+        .player-box {
+            padding: 8px 20px;
+            border-radius: 25px;
+            transition: all 0.3s;
+            border: 3px solid transparent;
+            text-align: center;
+        }
+
+        /* 當前玩家發光效果 */
+        .active-p1 {
+            border-color: var(--p1-color);
+            background-color: #FFEBEE;
+            box-shadow: 0 0 15px rgba(198, 40, 40, 0.3);
+            transform: scale(1.05);
+        }
+
+        .active-p2 {
+            border-color: var(--p2-color);
+            background-color: #E3F2FD;
+            box-shadow: 0 0 15px rgba(21, 101, 192, 0.3);
+            transform: scale(1.05);
+        }
+
+        .stat-item span { font-size: 1.4rem; }
+        .score-p1 { color: var(--p1-color); }
+        .score-p2 { color: var(--p2-color); }
+
+        .grid {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 12px;
+            max-width: 480px;
+        }
+
+        .card {
+            width: 105px;
+            height: 140px;
+            perspective: 1000px;
+            cursor: pointer;
+        }
+
+        .card-inner {
+            position: relative;
+            width: 100%;
+            height: 100%;
+            transition: transform 0.5s;
+            transform-style: preserve-3d;
+        }
+
+        .card.flipped .card-inner { transform: rotateY(180deg); }
+
+        .card-front, .card-back {
+            position: absolute;
+            width: 100%; height: 100%;
+            backface-visibility: hidden;
+            border-radius: 10px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 10px;
+            box-sizing: border-box;
+            text-align: center;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+        }
+
+        .card-back {
+            background-color: var(--primary);
+            color: white;
+            font-size: 2.5rem;
+            border: 4px solid #fff;
+        }
+
+        .card-front {
+            background-color: white;
+            color: var(--primary);
+            transform: rotateY(180deg);
+            border: 2px solid var(--primary);
+            font-size: 0.95rem;
+            font-weight: bold;
+        }
+
+        .card.matched .card-front {
+            background-color: #A5D6A7;
+            border-color: var(--success);
+        }
+
+        .view-timer {
+            position: fixed;
+            top: 50%; left: 50%;
+            transform: translate(-50%, -50%);
+            background: rgba(0, 0, 0, 0.9);
+            color: white;
+            padding: 40px 60px;
+            border-radius: 20px;
+            font-size: 2rem;
+            display: none;
+            z-index: 200;
+            text-align: center;
+            border: 4px solid var(--success);
+        }
+
+        #turn-indicator {
+            margin-bottom: 15px;
+            font-size: 1.3rem;
+            font-weight: bold;
+            padding: 5px 20px;
+            border-radius: 10px;
+        }
+
+        button {
+            padding: 15px 40px;
+            background: var(--primary);
+            color: white;
+            border: none;
+            border-radius: 10px;
+            cursor: pointer;
+            font-size: 1.2rem;
+            margin-top: 25px;
+            font-weight: bold;
+        }
+    </style>
+</head>
+<body>
+
+    <h1 style="color: var(--primary); margin-bottom: 10px;">原住民族文化配對：雙人對戰</h1>
+
+    <div class="dashboard">
+        <div class="stat-item" style="display: flex; align-items: center;">⏳ <span id="timer">120</span>s</div>
+        <div id="p2-box" class="player-box">👹 關主: <span id="p2-score" class="score-p2">0</span></div>
+        <div id="p1-box" class="player-box">👤 闖關者: <span id="p1-score" class="score-p1">0</span></div>
+    </div>
+
+    <div id="turn-indicator">點擊下方按鈕開始</div>
+
+    <div class="grid" id="game-grid"></div>
+
+    <!-- 暫停展示畫面 -->
+    <div id="view-notice" class="view-timer">
+        <div id="match-name-display" style="color: #FFD700; font-size: 1.5rem; margin-bottom: 15px;"></div>
+        配對成功！<br>展示中 (<span id="count-down">5</span>s)
+    </div>
+
+    <button id="start-btn" onclick="startGame()">開始遊戲 (關主先攻)</button>
+
+    <script>
+        const items = ["泰雅族的口簧琴", "排灣族/魯凱族的石板屋", "阿美族的情人袋", "達悟族的拼板舟", "賽夏族的臀鈴", "邵族的祖靈籃"];
+        let cardsData = [];
+        let flippedCards = [];
+        let p1Score = 0, p2Score = 0;
+        let timeLeft = 120;
+        let timerId = null;
+        let isPaused = false;
+        let currentTurn = 'p2'; // p2(關主) 或 p1(闖關者)
+
+        function startGame() {
+            p1Score = 0; p2Score = 0; timeLeft = 120;
+            isPaused = false; flippedCards = [];
+            currentTurn = 'p2';
+            
+            updateUI();
+            document.getElementById('start-btn').style.display = 'none';
+            
+            // 準備並洗牌
+            cardsData = [...items, ...items].sort(() => Math.random() - 0.5);
+            const grid = document.getElementById('game-grid');
+            grid.innerHTML = '';
+            
+            cardsData.forEach((name, index) => {
+                const card = document.createElement('div');
+                card.className = 'card';
+                card.innerHTML = `
+                    <div class="card-inner" onclick="handleFlip(this, '${name}')">
+                        <div class="card-back">？</div>
+                        <div class="card-front">${name}</div>
+                    </div>
+                `;
+                grid.appendChild(card);
+            });
+
+            startTimer();
+        }
+
+        function updateUI() {
+            document.getElementById('p1-score').innerText = p1Score;
+            document.getElementById('p2-score').innerText = p2Score;
+            document.getElementById('timer').innerText = timeLeft;
+            
+            const p1Box = document.getElementById('p1-box');
+            const p2Box = document.getElementById('p2-box');
+            const indicator = document.getElementById('turn-indicator');
+
+            p1Box.className = 'player-box' + (currentTurn === 'p1' ? ' active-p1' : '');
+            p2Box.className = 'player-box' + (currentTurn === 'p2' ? ' active-p2' : '');
+            
+            if (currentTurn === 'p1') {
+                indicator.innerText = "➡️ 現在回合：👤 闖關者";
+                indicator.style.color = "var(--p1-color)";
+            } else {
+                indicator.innerText = "➡️ 現在回合：👹 關主";
+                indicator.style.color = "var(--p2-color)";
+            }
+        }
+
+        function startTimer() {
+            clearInterval(timerId);
+            timerId = setInterval(() => {
+                if (!isPaused) {
+                    timeLeft--;
+                    document.getElementById('timer').innerText = timeLeft;
+                    if (timeLeft <= 0) endGame();
+                }
+            }, 1000);
+        }
+
+        async function handleFlip(cardInner, name) {
+            const card = cardInner.parentElement;
+            
+            // 防止在暫停、已翻開、或計時結束時點擊
+            if (isPaused || flippedCards.length >= 2 || card.classList.contains('flipped') || timeLeft <= 0) return;
+
+            card.classList.add('flipped');
+            flippedCards.push({ element: card, name: name });
+
+            if (flippedCards.length === 2) {
+                isPaused = true; // 檢查期間先暫停操作
+                
+                if (flippedCards[0].name === flippedCards[1].name) {
+                    // --- 配對成功 ---
+                    if (currentTurn === 'p1') p1Score++; else p2Score++;
+                    updateUI();
+                    
+                    flippedCards.forEach(c => c.element.classList.add('matched'));
+                    
+                    // 展示 5 秒並暫停總計時
+                    await startViewPause(name);
+                    
+                    flippedCards = [];
+                    isPaused = false;
+                    
+                    // 檢查是否結束
+                    if (p1Score + p2Score === 6) {
+                        endGame();
+                    } else {
+                        // 成功者繼續下一手，不換人
+                    }
+                } else {
+                    // --- 配對失敗 ---
+                    setTimeout(() => {
+                        flippedCards.forEach(c => c.element.classList.remove('flipped'));
+                        flippedCards = [];
+                        // 換人
+                        currentTurn = (currentTurn === 'p1' ? 'p2' : 'p1');
+                        updateUI();
+                        isPaused = false;
+                    }, 1000);
+                }
+            }
+        }
+
+        function startViewPause(matchedName) {
+            return new Promise((resolve) => {
+                const notice = document.getElementById('view-notice');
+                const countDownText = document.getElementById('count-down');
+                document.getElementById('match-name-display').innerText = "物品名稱：" + matchedName;
+                
+                notice.style.display = 'block';
+                let count = 5;
+                countDownText.innerText = count;
+                
+                const viewInterval = setInterval(() => {
+                    count--;
+                    if (count >= 0) countDownText.innerText = count;
+                    if (count <= 0) {
+                        clearInterval(viewInterval);
+                        notice.style.display = 'none';
+                        resolve();
+                    }
+                }, 1000);
+            });
+        }
+
+        function endGame() {
+            clearInterval(timerId);
+            isPaused = true;
+            let result = "";
+            if (p1Score > p2Score) {
+                result = "🎊 恭喜闖關者獲勝！";
+            } else if (p2Score > p1Score) {
+                result = "👹 關主守關成功！";
+            } else {
+                result = "🤝 雙方平手！";
+            }
+
+            alert(`遊戲結束！\n\n闖關者：${p1Score} 分\n關主：${p2Score} 分\n\n${result}`);
+            document.getElementById('start-btn').style.display = 'block';
+            document.getElementById('start-btn').innerText = "重新開始對戰";
+        }
+    </script>
+</body>
+</html>
